@@ -82,3 +82,5 @@ Desktop.ini
 # DOCKER
 # -----------------------------------------------------------------------------
 docker-compose.override.yml
+
+data/				# PDFs and chunk exports (large files)
