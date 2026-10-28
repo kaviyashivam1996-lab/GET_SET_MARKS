@@ -25,7 +25,43 @@ from __future__ import annotations
 import re
 from typing import NamedTuple
 
-import tiktoken
+try:
+    import tiktoken
+except (ImportError, Exception):
+    tiktoken = None
+
+class _FallbackEncoding:
+    """Fallback word-level encoding when tiktoken C-extension cannot be loaded."""
+    def __init__(self):
+        self._pattern = re.compile(r"\w+|[^\w\s]|\s+")
+        self._str_to_id: dict[str, int] = {}
+        self._id_to_str: dict[int, str] = {}
+        self._next_id = 1
+
+    def encode(self, text: str) -> list[int]:
+        tokens: list[int] = []
+        for match in self._pattern.finditer(text):
+            tok_str = match.group(0)
+            tok_id = self._str_to_id.get(tok_str)
+            if tok_id is None:
+                tok_id = self._next_id
+                self._next_id += 1
+                self._str_to_id[tok_str] = tok_id
+                self._id_to_str[tok_id] = tok_str
+            tokens.append(tok_id)
+        return tokens
+
+    def decode(self, token_ids: list[int]) -> str:
+        return "".join(self._id_to_str.get(tid, "") for tid in token_ids)
+
+
+def _get_encoding(encoding_name: str = "cl100k_base"):
+    if tiktoken is not None:
+        try:
+            return tiktoken.get_encoding(encoding_name)
+        except Exception:
+            pass
+    return _FallbackEncoding()
 
 from .models import Chunk, PageContent
 
@@ -91,7 +127,7 @@ def chunk_pages(
     list[Chunk]
         Chunks in document order, each with full metadata.
     """
-    enc = tiktoken.get_encoding(encoding_name)
+    enc = _get_encoding(encoding_name)
     step = target_tokens - overlap_tokens
 
     # -----------------------------------------------------------------------
